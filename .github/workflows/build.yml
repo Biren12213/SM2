@@ -22,49 +22,36 @@ jobs:
 
       - name: Configure Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-
-          ls -la "$ANDROID_HOME/cmdline-tools/latest/bin" || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
-
-      - name: Accept Android licenses
-        run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-          yes | sdkmanager --licenses || true
-
-      - name: Install Android SDK packages
-        run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      - name: Check Android SDK
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Check project
         run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          echo "Project files:"
+          ls -la
+          echo ""
+          echo "Gradle files:"
+          find . -maxdepth 2 \( -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts" \) -print
 
-          sdkmanager --list | head -40
-          adb version
-          test -d "$ANDROID_HOME/platforms/android-35"
-          test -d "$ANDROID_HOME/build-tools/35.0.0"
+      - name: Build BiReN
+        run: gradle clean assembleDebug --stacktrace
 
-      - name: Make Gradle executable
-        run: chmod +x ./gradlew
+      - name: Check APK
+        run: |
+          echo "APK files:"
+          find app/build/outputs -type f -name "*.apk" -print
 
-      - name: Clean project
-        run: ./gradlew clean --stacktrace
-
-      - name: Build BiReN APK
-        run: ./gradlew assembleDebug --stacktrace
-
-      - name: Upload APK
+      - name: Upload BiReN APK
         uses: actions/upload-artifact@v4
         with:
           name: BiReN-debug-APK
