@@ -20,11 +20,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          which sdkmanager || true
+          sdkmanager --version
 
       - name: Accept Android licenses
-        run: yes | sdkmanager --licenses || true
+        run: |
+          yes | sdkmanager --licenses || true
 
       - name: Install Android SDK packages
         run: |
@@ -32,18 +37,24 @@ jobs:
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      - name: Give Gradle permission
-        run: chmod +x gradlew
+      - name: Check Android SDK
+        run: |
+          adb version
+          ls "$ANDROID_HOME/platforms/android-35"
+          ls "$ANDROID_HOME/build-tools/35.0.0"
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
 
       - name: Clean project
-        run: ./gradlew clean
+        run: ./gradlew clean --stacktrace
 
-      - name: Build APK
+      - name: Build BiReN APK
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BiReN-debug
+          name: BiReN-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
