@@ -22,38 +22,111 @@ jobs:
 
       - name: Configure Android SDK
         run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
+      - name: Find Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for Gradle project..."
+
+          PROJECT_DIR=""
+
+          # First look for an existing Gradle project.
+          SETTINGS_FILE=$(find . \
+            -type f \
+            \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
+            -not -path "./.git/*" \
+            | head -n 1 || true)
+
+          if [ -n "$SETTINGS_FILE" ]; then
+            PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+            echo "Found Gradle project at: $PROJECT_DIR"
+          fi
+
+          # If no Gradle project exists, look for a ZIP and extract it.
+          if [ -z "$PROJECT_DIR" ]; then
+            ZIP_FILE=$(find . \
+              -maxdepth 2 \
+              -type f \
+              -iname "*.zip" \
+              -not -path "./.git/*" \
+              | head -n 1 || true)
+
+            if [ -n "$ZIP_FILE" ]; then
+              echo "Found ZIP: $ZIP_FILE"
+
+              mkdir -p extracted-project
+              unzip -q "$ZIP_FILE" -d extracted-project
+
+              SETTINGS_FILE=$(find extracted-project \
+                -type f \
+                \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
+                | head -n 1 || true)
+
+              if [ -n "$SETTINGS_FILE" ]; then
+                PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+                echo "Extracted Gradle project at: $PROJECT_DIR"
+              fi
+            fi
+          fi
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo ""
+            echo "ERROR: No Android Gradle project was found."
+            echo ""
+            echo "Repository contents:"
+            find . -maxdepth 3 -type f | sort
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo ""
+          echo "================================"
+          echo "ANDROID PROJECT:"
+          echo "$PROJECT_DIR"
+          echo "================================"
+          echo ""
+
+          ls -la "$PROJECT_DIR"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
-
-      - name: Check project
-        run: |
-          echo "Project files:"
-          ls -la
-          echo ""
-          echo "Gradle files:"
-          find . -maxdepth 2 \( -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts" \) -print
+          gradle-version: "8.9"
 
       - name: Build BiReN
-        run: gradle clean assembleDebug --stacktrace
-
-      - name: Check APK
         run: |
-          echo "APK files:"
-          find app/build/outputs -type f -name "*.apk" -print
+          echo "Building project:"
+          echo "$PROJECT_DIR"
+
+          gradle \
+            -p "$PROJECT_DIR" \
+            clean \
+            assembleDebug \
+            --stacktrace
+
+      - name: Find APK
+        run: |
+          echo "Searching for APK..."
+
+          find "$PROJECT_DIR/app/build/outputs" \
+            -type f \
+            -name "*.apk" \
+            -print
 
       - name: Upload BiReN APK
         uses: actions/upload-artifact@v4
         with:
           name: BiReN-debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: "**/app/build/outputs/apk/debug/*.apk"
           if-no-files-found: error
